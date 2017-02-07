@@ -4,24 +4,41 @@ import numpy as np
 import pickle
 import EDA as eda
 import AalenAdditiveModel as AAM
+import os.path
+import random, string
+from sklearn.utils import resample
+import gzip
+import glob
+import sys
+from sklearn.model_selection import train_test_split
+
+def randomword(length):
+  return ''.join(random.choice(string.lowercase) for i in range(length))
 
 #Pickle the list of bootstrap_number models.
-filename1 = 'kac3_google_user_date.csv'
-filename2 = 'kac3_google_history.csv'
-filename3 = 'kac3_google_user_filter.csv'
+user_data_filename = 'kac3_google_user_date.csv'
+history_data_filename = 'kac3_google_history.csv'
+filter_data_filename = 'kac3_google_user_filter.csv'
 
-# build the clean data set and save it in cleaned_dataset.p
-cleaned_dataset_km = eda.clean_data_km(filename1, filename2, filename3)
-filename = 'cleaned_dataset_km.p'
-fileobject = open(filename, 'wb')
-user_dataset_km= pickle.dump(cleaned_dataset_km, fileobject)
-fileobject.close()
+
+
+#######
+########
+#######
+cleaned_dataset_km_filename = 'cleaned_dataset_km.p'
+if not os.path.exists(cleaned_dataset_km_filename):
+    # build the clean data set and save it in cleaned_dataset.p
+    cleaned_dataset_km = eda.clean_data_km(user_data_filename, history_data_filename, filter_data_filename)
+    fileobject = open(cleaned_dataset_km_filename, 'wb')
+    pickle.dump(cleaned_dataset_km, fileobject)
+    fileobject.close()
 
 # load the cleaned data set in the previous step.
-filename = 'cleaned_dataset_km.p'
-fileobject = open(filename, 'rb')
-user_dataset_km= pickle.load(fileobject)
+fileobject = open(cleaned_dataset_km_filename, 'rb')
+user_dataset_km = pickle.load(fileobject)
 fileobject.close()
+#######
+########
 
 eda.plot_Kaplan_Meier_overall(user_dataset_km)
 eda.plot_Kaplan_Meier_feature(user_dataset_km)
@@ -37,88 +54,153 @@ an example.
 
 The data set was loaded from a pickled file called 'cleaned_dataset.p.'
 
-The list of bootstrap models are pickled as 'AAF_100.p'.
+The list of bootstrap models are pickled as 'AAF_50.p'.
 
 '''
-# build the clean data set and save it in cleaned_dataset.p
-cleaned_dataset = eda.clean_data(filename1, filename2, filename3)
-filename = 'cleaned_dataset.p'
-fileobject = open(filename, 'wb')
-user_dataset= pickle.dump(cleaned_dataset, fileobject)
-fileobject.close()
+
+
+cleaned_dataset_filename = 'cleaned_dataset.p'
+if not os.path.exists(cleaned_dataset_filename):
+    # build the clean data set and save it in cleaned_dataset.p
+    cleaned_dataset = eda.clean_data(user_data_filename, history_data_filename, filter_data_filename)
+    fileobject = open(cleaned_dataset_filename, 'wb')
+    pickle.dump(cleaned_dataset, fileobject)
+    fileobject.close()
+
 
 # load the cleaned data set in the previous step.
-filename = 'cleaned_dataset.p'
-fileobject = open(filename, 'rb')
-user_dataset= pickle.load(fileobject)
+fileobject = open(cleaned_dataset_filename, 'rb')
+user_dataset = pickle.load(fileobject)
 fileobject.close()
-#Call Bootstrap function to perform bootstrap modelling
-#Number of bootstrap models = 100
-bootstrap_number = 100
-AAF_100 = AAM.Bootstrap(user_dataset, bootstrap_number)
+observed_dataset = user_dataset[user_dataset['kac'] == 1]
+train_dataset, test_dataset = train_test_split(observed_dataset, test_size = 0.2)
+censored_dataset = user_dataset[user_dataset['kac'] == 0]
+print "Max days !!!!!"
+print censored_dataset['days'].max()
 
-#Pickle the list of bootstrap_number models.
-filename = 'AAF_100.p'
-fileobject = open(filename, 'wb')
-user_dataset= pickle.dump(AAF_100, fileobject)
-fileobject.close()
+#bootstrap_filename = 'AAF_50.p'
 
-'''This program loads a pickled user data set and a list of n bootstrap trained models.  Then it passes
-the list of models and the censored part of the data set to the Aalen_predict_lifetimes functions, which
-generates a mean and median predicted lifetimes for each censored user.  The mean and median lifetimes
-are combined with the data set as new columns and output as a csv file.
-'''
+model_dir = './model_dir/'
+######
+
+
+try:
+       create_bootstrap_models = bool(int(sys.argv[1]))
+       bootstrap_number = int(sys.argv[2])
+       use_bootstrap = bool(int(sys.argv[3]))
+except:
+       create_bootstrap_models = True
+       bootstrap_number = 300
+       use_bootstrap = False
+       print '**DOING DEFAULT nBOOTSTRAP=',bootstrap_number
+
+print 'options={},{},{}'.format(create_bootstrap_models,bootstrap_number,use_bootstrap)
+
+
+if create_bootstrap_models:
+
+    print 'bootstrap number=  ',bootstrap_number
+
+    for b_number in range(0,bootstrap_number):
+
+        bootstrap_filename = 'bootstrap_'+randomword(10)+'.gz'
+        #print 'about to do ',b_number
+        bootstrap_train_dataset = resample(train_dataset)
+        model_and_concordance_index = AAM.create_one_aaf_model_with_concordance_index(bootstrap_train_dataset, test_dataset)
+        writepath = model_dir+bootstrap_filename
+
+    #Pickle the list of bootstrap_number models.
+        print 'bootstrap={},name={}'.format(b_number,bootstrap_filename)
+        with gzip.GzipFile(writepath, 'wb') as f: pickle.dump(model_and_concordance_index, f)
+
+    #fileobject.close()
+else:
+    AAF_list = []
+    concordance_indices = []
+    print '###########evaluating models!!!!!!'
+    if use_bootstrap:
+        pathpiece = model_dir+'*.gz'
+        model_paths = glob.glob(pathpiece)
+        for model_path in model_paths:
+            with gzip.open(model_path,'rb') as f:
+                model_and_concordance_index = pickle.load(f)
+                print 'path={},length of models={}'.format(model_path,len(AAF_list))
+                concordance_indices.append(model_and_concordance_index[1])
+                AAF_list.append(model_and_concordance_index[0])
+    else:
+        model_and_concordance_index = AAM.create_one_aaf_model_with_concordance_index(train_dataset, test_dataset)
+        concordance_indices.append(model_and_concordance_index[1])
+        AAF_list.append(model_and_concordance_index[0])
+
+    print 'Mean condordance index for all models :'
+    print np.mean(concordance_indices)
+    print 'DONE!'
+    AAM.plot_cum_haz_functions(AAF_list)
+
+
+    print 'Calling Aalen_predicting_lifetimes to make predictions for lifetimes...'
+    df_lifetime = AAM.Aalen_predict_lifetimes(AAF_list, censored_dataset)
+    print 'Predictions completed'
+
+    df_lifetime.to_csv('dataset_with_predicted_lifetimes.csv')
+    ########
+
+
+    user_cum_haz_functions_list = AAM.Aalen_cum_haz(AAF_list, censored_dataset)
+    #This is the number of random censored users whose cumulative hazard function is to be plotted.
+    number_users_to_be_plotted = 4
+    #These are the parameters for the figures.
+
+
+    #Call the function to plot the users' cumulative hazard function.
+    AAM.plot_user_cum_haz(user_cum_haz_functions_list, number_users_to_be_plotted)
+
+
+#
+#
+# '''This program loads a pickled user data set and a list of n bootstrap trained models.  Then it passes
+# the list of models and the censored part of the data set to the Aalen_predict_lifetimes functions, which
+# generates a mean and median predicted lifetimes for each censored user.  The mean and median lifetimes
+# are combined with the data set as new columns and output as a csv file.
+# '''
 #Load the pickled user dataset
-print 'Loading cleaned dataset...'
-filename = 'cleaned_dataset.p'
-fileobject = open(filename, 'rb')
-user_dataset= pickle.load(fileobject)
-fileobject.close()
-print 'Cleaned dataset loaded.'
+# print 'Loading cleaned dataset...'
+# filename = 'cleaned_dataset.p'
+# fileobject = open(filename, 'rb')
+# user_dataset = pickle.load(fileobject)
+# fileobject.close()
+# print 'Cleaned dataset loaded.'
 
 
 #Select only the censored data to make predictions of.  These are users who have not churned.  Note the model was trained on uncensored (churned) users because they are the ones whose lifetimes are known.
 
-censored_user_dataset = user_dataset[user_dataset['censored'] == 1]
+# censored_dataset = user_dataset[user_dataset['kac'] == 0]
+#
+# #Load the pickled list of Aalen models.
+# print 'Loading list of bootstrap trained models...'
+# filename = 'AAF_50.p'
+# fileobject = open(filename, 'rb')
+# AAF_50 = pickle.load(fileobject)
+# fileobject.close()
+# print 'bootstrap trained models loaded.'
+#
+#
+# #This calls the Aalen_predict_lifetimes function which uses the bootstrap models to predict
+# #the lifetimes of each line of data.  The mean and median lifetimes of each user is added to
+# #as new columns to the dataframe and then returned.
 
-#Load the pickled list of Aalen models.
-print 'Loading list of bootstrap trained models...'
-filename = 'AAF_100.p'
-fileobject = open(filename, 'rb')
-AAF_100 = pickle.load(fileobject)
-fileobject.close()
-print 'bootstrap trained models loaded.'
-
-
-#This calls the Aalen_predict_lifetimes function which uses the bootstrap models to predict
-#the lifetimes of each line of data.  The mean and median lifetimes of each user is added to
-#as new columns to the dataframe and then returned.
-print 'Calling Aalen_predicting_lifetimes to make predictions for lifetimes...'
-df_lifetime = AAM.Aalen_predict_lifetimes(AAF_100, censored_user_dataset)
-print 'Predictions completed'
-
-df_lifetime.to_csv('dataset_with_predicted_lifetimes.csv')
-
-print 'DATA SET WITH PREDICTED LIFETIME COLUMNS HAS BEEN SAVED TO THIS FOLDER AS csv FILE.'
-
-'''This program loads a list of trained bootstrap model, calculate their cumulative hazard functions, and plot them.
-Each figure represents n bootstrap models of a hazard.  The spread of the function nicely illustrates the variance
-between the functions.
-'''
-
-#Pass the list to the following function to be plotted.
-AAM.plot_cum_haz_functions(AAF_list_100, 10)
-
-'''This program invokes the plot_user_cum_haz function from Aalen_KMF_plots.py to
-plot the cumulative hazard functions for a random number of chosen users.  NB: This is
-the hazard function individually customized for each user, depending on her/his features.
-'''
-
-#This is the number of random censored users whose cumulative hazard function is to be plotted.
-number_users_to_be_plotted = 2
-#These are the parameters for the figures.
-years = 5
-y_max = 3
-lw = 0.03
-#Call the function to plot the users' cumulative hazard function.
-AAM.plot_user_cum_haz(AAF_list_100, user_dataset, number_users_to_be_plotted, years, y_max, lw)
+#
+# print 'DATA SET WITH PREDICTED LIFETIME COLUMNS HAS BEEN SAVED TO THIS FOLDER AS csv FILE.'
+#
+# '''This program loads a list of trained bootstrap model, calculate their cumulative hazard functions, and plot them.
+# Each figure represents n bootstrap models of a hazard.  The spread of the function nicely illustrates the variance
+# between the functions.
+# '''
+#
+# #Pass the list to the following function to be plotted.
+# AAM.plot_cum_haz_functions(AAF_50)
+#
+# '''This program invokes the plot_user_cum_haz function from Aalen_KMF_plots.py to
+# plot the cumulative hazard functions for a random number of chosen users.  NB: This is
+# the hazard function individually customized for each user, depending on her/his features.
+# '''

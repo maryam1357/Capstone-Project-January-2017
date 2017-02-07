@@ -35,11 +35,10 @@ def plot_Kaplan_Meier_overall(df_final_km):
 	kmf.plot(ax=ax)
 	ax.set_xlabel('days', size = 20)
 	ax.set_ylabel('Surviving user population', size = 20)
-	ax.set_xlim(0,2000)
-	ax.set_ylim(0, 1)
 	ax.grid()
 	ax.legend(loc = 'best', fontsize = 20)
-	plt.show()
+	plt.savefig('kaplan_meier_baseline.png')
+	plt.close()
 	return
 
 def plot_Kaplan_Meier_feature(df_final_km):
@@ -54,21 +53,21 @@ def plot_Kaplan_Meier_feature(df_final_km):
 	This function does not return anything.
 	'''
 	print df_final_km.head()
-	df_final_km_dropped = df_final_km.drop(['f_type_0','f_type_1','f_type_2','f_type_3','f_type_5'], axis=1)
+	df_final_km_dropped = df_final_km.drop(['rollup_count','unsubscribe_count','inbox_count','fresh_count','unknown_count'], axis=1)
 	features = list(df_final_km_dropped.columns)
 	features.remove('days')
 	features.remove('kac')
 	features.remove('count_initial_scan_subscriptions')
 	features.remove('kac_quarter')
-	print features
 	for feature in features:
 		ax = plt.subplot(111)
 		for item in df_final_km_dropped[feature].unique():
 			df_sub = df_final_km_dropped.loc[df_final_km_dropped[feature]==item]
 			km = sa.KaplanMeierFitter()
 			km.fit(durations=df_sub['days'], event_observed=df_sub['kac'], label=item)
-			ax = km.plot(ax=ax)
-		plt.show()
+			ax = km.plot(ax=ax, label=feature)
+		plt.savefig('kaplan_meier_feature_{}.png'.format(feature))
+		plt.close()
 
 def assign_email_group(string):
     if string.split('.')[-1]=='edu':
@@ -89,7 +88,7 @@ def clean_user_data(df_user):
 def clean_filter(df_filter):
 	print "Cleaning filter"
 	df_filter_type_count = df_filter.groupby(['user_id', 'filter_type_id'])['filter_type_id'].count().unstack().fillna(0)
-	df_filter_type_count = df_filter_type_count.rename(columns={0:'f_type_0', 1:'f_type_1', 2:'f_type_2', 3:'f_type_3', 5:'f_type_5'})
+	df_filter_type_count = df_filter_type_count.rename(columns={0:'rollup_count', 1:'unsubscribe_count', 2:'inbox_count', 3:'fresh_count', 5:'unknown_count'})
 	print df_filter_type_count.head()
 	return df_filter_type_count
 
@@ -113,11 +112,11 @@ def merge_and_clean_user_history_data(df_clean_user, df_history):
 def create_final_set(df_clean_user_history, df_filter_type_count):
 	print "Creating the final km data set"
 	df_final_km = df_clean_user_history.join(df_filter_type_count, on='user_id')
-	df_final_km[['f_type_0', 'f_type_1', 'f_type_2', 'f_type_3', 'f_type_5']] = df_final_km[['f_type_0', 'f_type_1', 'f_type_2', 'f_type_3', 'f_type_5']].fillna(0)
-	df_final_km['rollup'] = pd.cut(df_final_km.f_type_0, bins=[-1, 20, 999999], labels=['<mean', '>mean'])
-	df_final_km['unsubscribe'] = pd.cut(df_final_km.f_type_1, bins=[-1, 105, 999999], labels=['<mean', '>mean'])
-	df_final_km['inbox'] = pd.cut(df_final_km.f_type_2, bins=[-1, 45, 999999], labels=['<mean', '>mean'])
-	df_final_km['fresh'] = pd.cut(df_final_km.f_type_3, bins=[-1, 185, 999999], labels=['<mean', '>mean'])
+	df_final_km[['rollup_count', 'unsubscribe_count', 'inbox_count', 'fresh_count', 'unknown_count']] = df_final_km[['rollup_count', 'unsubscribe_count', 'inbox_count', 'fresh_count', 'unknown_count']].fillna(0)
+	df_final_km['rollup'] = pd.cut(df_final_km.rollup_count, bins=[-1, 20, 999999], labels=['<mean', '>mean'])
+	df_final_km['unsubscribe'] = pd.cut(df_final_km.unsubscribe_count, bins=[-1, 105, 999999], labels=['<mean', '>mean'])
+	df_final_km['inbox'] = pd.cut(df_final_km.inbox_count, bins=[-1, 45, 999999], labels=['<mean', '>mean'])
+	df_final_km['fresh'] = pd.cut(df_final_km.fresh_count, bins=[-1, 185, 999999], labels=['<mean', '>mean'])
 	df_final_km = df_final_km.drop(['join_timestamp','kac_update_timestamp','disconnect_timestamp'], axis=1)
 	a = df_final_km['user_id']
 	df_final_km.set_index(a,inplace=True)
@@ -143,9 +142,14 @@ def clean_data(userData, historyData, filterData):
 
 	dummies_signup_origin = pd.get_dummies(df_final_km['signup_origin']).rename(columns = lambda x: 'signup_origin_'+str(x))
 	df_final_km = pd.concat([df_final_km,dummies_signup_origin],axis=1)
-	df_final_km = df_final_km.drop('signup_origin_Old Website', 1)
-	df_final_aa = df_final_km.drop(['domains_edu', 'signup_origin','domains','rollup', 'unsubscribe', 'inbox', 'fresh','intial_scan_count'], axis=1)
 
+       #u'count_initial_scan_subscriptions', u'not_active', u'days',
+       #u'join_quarter', u'kac_quarter', u'f_type_0', u'f_type_1', u'f_type_2',
+       #u'f_type_3', u'f_type_5', u'domains_gmail', u'domains_others',
+       #u'signup_origin_Web App', u'signup_origin_iPhone'
+	df_final_km = df_final_km.drop('signup_origin_Old Website', 1)
+	df_final_aa = df_final_km.drop(['domains_edu','unknown_count','fresh_count','inbox_count','unsubscribe_count','rollup_count','domains_others','signup_origin','domains','rollup', 'unsubscribe', 'inbox', 'fresh','intial_scan_count', 'kac_quarter'], axis=1)
 	print "Cleaning data completed!!!"
 	print df_final_aa.head()
 	return df_final_aa
+	#,,,,'signup_origin_iPhone','count_initial_scan_subscriptions','domains_gmail','signup_origin_Web App'
