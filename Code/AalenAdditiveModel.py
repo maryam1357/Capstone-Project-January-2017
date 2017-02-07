@@ -173,7 +173,6 @@ def plot_user_cum_haz(user_cum_haz_functions_list, number_of_users = 8):
     plt.subplot(111)
     for i,row in enumerate(rows):
         for user_cum_haz_functions in user_cum_haz_functions_list:
-            print "here"
             plt.plot(user_cum_haz_functions.T.iloc[row], alpha = 0.05, color = colors[i%10])
     plt.xlabel('Days', size = 10)
     plt.ylabel("user cumulative hazard function", size = 10)
@@ -181,8 +180,6 @@ def plot_user_cum_haz(user_cum_haz_functions_list, number_of_users = 8):
     plt.annotate(text, xy=(0, 0), xytext=(0.2, 2.8))
     plt.ylim(-1, 15)
     plt.grid()
-    print "am i right?"
     plt.savefig('10_users.png')
-    print "SHIT no"
     plt.close()
     print "Done plotting"
