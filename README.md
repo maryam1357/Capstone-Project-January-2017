@@ -8,7 +8,9 @@ How to extend user lifetimes?
 
 ## Dataset
 User database from XX Company.
+
 100,000 users over 5 years.
+
 Each row contains >10 features. Example of features: Platform, gender, email, ...
 
 ## Modeling Approach
