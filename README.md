@@ -2,16 +2,16 @@
 Capstone-Project-January-2017
 
 
-##Questions to be answered:
+#Questions to be answered:
 What are the good predictors of user lifetimes? More importantly, how do these predictors influence them.
 How to extend user lifetimes?
 
-##Dataset
+#Dataset
 User database from XX Company.
 100,000 users over 5 years.
 Each row contains >10 features. Example of features: Platform, gender, email, ...
 
-##Modeling Approach
+#Modeling Approach
 The Aalen Additive model, which is patient-survival regression model, was used to predict the lifetime. The model fits the data to a hazard function in turn is used to predict the lifetime. A detailed description of this machine learning methodology can be found in Ch.3 of master's dissertation by Huilin Gao.
 http://archimede.mat.ulaval.ca/theses/H-Cao_05.pdf
 
@@ -27,7 +27,7 @@ Why not a multi-decision tree model? Because a patient-survival model is more in
 Why not linear or logistic regression? Because the residuals are not uniform over time. This is turn to due to the fact that the number of users decreases as more of them churn over time.
 Why not a proportional hazard model, such as the Cox proportional hazard model? Because this assumes the hazards are in at a fixed proportion with each other over time. There is no reason to believe that is true in our case.
 
-##Data processing
+#Data processing
 Python pandas was used to impute and clean up data.
 Data package "Lifelines" which contains the Aalen additive model was used to model and plot the data. The Lifelines package can be installed by typing pip install lifelines.
 Sample Python codes to train the models by bootstrapping and plot the results can be found in the 'Code' folder. A Python interpreter is needed to run them.
